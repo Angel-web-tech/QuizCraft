@@ -1,7 +1,14 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
 
-// https://vite.dev/config/
+const apiTarget = process.env.QUIZCRAFT_API_URL || 'http://localhost:5006';
+
 export default defineConfig({
-  plugins: [react()],
-})
+  server: {
+    host: '0.0.0.0',
+    port: 5176,
+    strictPort: true,
+    proxy: {
+      '/api': apiTarget,
+    },
+  },
+});

@@ -1,20 +1,65 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-const verifyToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+const cookieName = 'quizcraft_session';
 
-    if (!token) {
-        return res.status(401).json({ message: 'No token provided, authorization denied' });
+function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+    maxAge: 24 * 60 * 60 * 1000,
+  };
+}
+
+function setSessionCookie(res, user) {
+  const token = jwt.sign(
+    { sub: user.id },
+    process.env.JWT_SECRET,
+    { expiresIn: '24h', issuer: 'quizcraft-api', audience: 'quizcraft-web' }
+  );
+  res.cookie(cookieName, token, sessionCookieOptions());
+}
+
+async function authenticate(req, res, next) {
+  const token = req.cookies?.[cookieName];
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Please sign in to continue.' });
+  }
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET, {
+      issuer: 'quizcraft-api',
+      audience: 'quizcraft-web',
+    });
+    const user = await User.findById(payload.sub);
+    if (!user || !user.isActive) {
+      return res.status(401).json({ success: false, message: 'This account is unavailable.' });
     }
-
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded;
-        next();
-    } catch (err) {
-        res.status(401).json({ message: 'Token is not valid' });
+    req.user = user;
+    return next();
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: 'Your session has expired. Please sign in again.' });
     }
+    return next(error);
+  }
+}
+
+function authorize(...roles) {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to access this resource.' });
+    }
+    return next();
+  };
+}
+
+module.exports = {
+  authenticate,
+  authorize,
+  setSessionCookie,
+  clearSessionCookie: cookieName,
+  sessionCookieOptions,
 };
-
-module.exports = verifyToken;

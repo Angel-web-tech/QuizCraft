@@ -1,9 +1,11 @@
 const express = require('express');
-const router = express.Router();
-const attemptController = require('../controllers/attemptController');
-const verifyToken = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
+const controller = require('../controllers/attemptController');
 
-router.post('/', verifyToken, attemptController.submitAttempt);
-router.get('/user', verifyToken, attemptController.getUserAttempts);
+const router = express.Router();
+router.use(authenticate, authorize('student'));
+router.post('/', controller.begin);
+router.get('/:id', controller.getAttempt);
+router.post('/:id/submit', controller.submit);
 
 module.exports = router;

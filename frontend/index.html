@@ -2,12 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <meta name="theme-color" content="#11142b" />
+    <meta name="description" content="QuizCraft — create, challenge, and conquer." />
+    <link rel="icon" type="image/svg+xml" href="/quizcraft.svg" />
+    <link rel="stylesheet" href="/assets/css/style.css" />
+    <title>QuizCraft — Create. Challenge. Conquer.</title>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <main id="app" aria-live="polite">
+      <div class="loading-screen"><span class="spinner" aria-hidden="true"></span><p>Loading QuizCraft…</p></div>
+    </main>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/assets/js/app.js"></script>
   </body>
 </html>

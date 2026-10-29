@@ -1,60 +1,75 @@
-const db = require('../config/db');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+const { publicUser } = require('./shared');
+const { setSessionCookie, clearSessionCookie, sessionCookieOptions } = require('../middleware/auth');
 
-exports.register = async (req, res) => {
-    const { name, email, password } = req.body;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (!name || !email || !password)
-        return res.status(400).json({ message: 'Name, email and password are required' });
-
-    try {
-        const [existing] = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
-        if (existing.length > 0)
-            return res.status(400).json({ message: 'An account with this email already exists' });
-
-        const hashed = await bcrypt.hash(password, 10);
-        // All users get 'creator' role — everyone can create AND take quizzes
-        const [result] = await db.execute(
-            'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
-            [name, email, hashed, 'creator']
-        );
-
-        res.status(201).json({ message: 'Account created successfully', userId: result.insertId });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
+async function register(req, res, next) {
+  try {
+    const { name, email, registerNumber, department, password } = req.body;
+    if (
+      typeof name !== 'string' ||
+      !name.trim() ||
+      typeof email !== 'string' ||
+      !emailPattern.test(email.trim()) ||
+      typeof registerNumber !== 'string' ||
+      !registerNumber.trim() ||
+      typeof department !== 'string' ||
+      !department.trim() ||
+      typeof password !== 'string' ||
+      password.length < 10 ||
+      password.length > 128
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Enter your name, valid email, register number, department, and a password of at least 10 characters.',
+      });
     }
-};
 
-exports.login = async (req, res) => {
-    const { email, password } = req.body;
+    const user = await User.create({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      registerNumber: registerNumber.trim().toUpperCase(),
+      department: department.trim(),
+      passwordHash: await bcrypt.hash(password, 12),
+      role: 'student',
+    });
+    return res.status(201).json({ success: true, data: { user: publicUser(user) } });
+  } catch (error) {
+    return next(error);
+  }
+}
 
-    if (!email || !password)
-        return res.status(400).json({ message: 'Email and password are required' });
-
-    try {
-        const [users] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
-        if (users.length === 0)
-            return res.status(400).json({ message: 'Invalid email or password' });
-
-        const user = users[0];
-        const match = await bcrypt.compare(password, user.password);
-        if (!match)
-            return res.status(400).json({ message: 'Invalid email or password' });
-
-        const token = jwt.sign(
-            { id: user.id, name: user.name, role: user.role },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-
-        res.json({
-            token,
-            user: { id: user.id, name: user.name, email: user.email, role: user.role }
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
+async function login(req, res, next) {
+  try {
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    const requestedRole = req.body.role;
+    if (!emailPattern.test(email) || !password || !['student', 'admin'].includes(requestedRole)) {
+      return res.status(400).json({ success: false, message: 'Enter valid credentials and choose Student or Admin login.' });
     }
-};
+
+    const user = await User.findOne({ email }).select('+passwordHash');
+    const passwordMatches = user ? await bcrypt.compare(password, user.passwordHash) : false;
+    if (!user || !passwordMatches || user.role !== requestedRole || !user.isActive) {
+      return res.status(401).json({ success: false, message: 'Email, password, or selected account type is incorrect.' });
+    }
+
+    setSessionCookie(res, user);
+    return res.json({ success: true, data: { user: publicUser(user) } });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function logout(req, res) {
+  res.clearCookie(clearSessionCookie, { ...sessionCookieOptions(), maxAge: undefined });
+  return res.json({ success: true, data: { message: 'You have been signed out.' } });
+}
+
+function me(req, res) {
+  return res.json({ success: true, data: { user: publicUser(req.user) } });
+}
+
+module.exports = { register, login, logout, me };

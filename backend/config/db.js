@@ -1,16 +1,13 @@
-const mysql = require('mysql2');
-const dotenv = require('dotenv');
+const mongoose = require('mongoose');
 
-dotenv.config();
+async function connectDatabase() {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error('MONGODB_URI is required. Set it in backend/.env before starting the API.');
+  }
 
-const pool = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
+  await mongoose.connect(uri, { serverSelectionTimeoutMS: 10000 });
+  console.log(`MongoDB connected (${mongoose.connection.name})`);
+}
 
-module.exports = pool.promise();
+module.exports = connectDatabase;
